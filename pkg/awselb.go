@@ -13,6 +13,7 @@ func Newelb(profile string, region string) *elasticloadbalancingv2.Client {
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithSharedConfigProfile(profile),
 		config.WithRegion(region),
+		config.WithRetryMaxAttempts(20),
 	)
 
 	if err != nil {
