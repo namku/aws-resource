@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package cmd
 
 import (
@@ -39,8 +40,6 @@ var loadbalancerCmd = &cobra.Command{
 		unhealthy, _ := cmd.Flags().GetBool("unhealthy")
 
 		describeTargetGroups(profile, region, withouttargets, unhealthy)
-		//describeTargetHealth(profile, region)
-
 	},
 }
 
@@ -79,16 +78,16 @@ func describeTargetHealth(profile string, region string, tGroup string, lbArns [
 	}
 
 	if withouttargets {
-		loadbalancerwithouttargets(result, tGroup, lbArns)
+		loadbalancerWithoutTargets(result, tGroup, lbArns)
 	}
 	if unhealthy {
-		loadbalancerunhealthy(result, tGroup, lbArns)
+		loadbalancerUnhealthy(result, tGroup, lbArns)
 	}
 
 }
 
 // check target group without targets or not loadbalancer associated.
-func loadbalancerwithouttargets(result *elasticloadbalancingv2.DescribeTargetHealthOutput, tGroup string, lbArns []string) {
+func loadbalancerWithoutTargets(result *elasticloadbalancingv2.DescribeTargetHealthOutput, tGroup string, lbArns []string) {
 	if len(result.TargetHealthDescriptions) == 0 {
 		fmt.Println(tGroup)
 		if lbArns == nil {
@@ -101,7 +100,7 @@ func loadbalancerwithouttargets(result *elasticloadbalancingv2.DescribeTargetHea
 }
 
 // check target group without targets or not loadbalancer associated.
-func loadbalancerunhealthy(result *elasticloadbalancingv2.DescribeTargetHealthOutput, tGroup string, lbArns []string) {
+func loadbalancerUnhealthy(result *elasticloadbalancingv2.DescribeTargetHealthOutput, tGroup string, lbArns []string) {
 	// new target group
 	newtGroup := tGroup
 
