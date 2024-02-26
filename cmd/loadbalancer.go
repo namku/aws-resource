@@ -24,24 +24,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var tGroupSlice []string
+//var tGroupSlice []string
 
-var describeCmd = &cobra.Command{
-	Use:   "describe",
-	Short: "The aws-resource describe",
-	Long:  `Usage: aws-ssm describe [args].`,
+var loadbalancerCmd = &cobra.Command{
+	Use:   "loadbalancer",
+	Short: "The aws-resource loadbalancer",
+	Long:  `Usage: aws-ssm loadbalancer [args].`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// flags for custom aws config
 		profile, _ := cmd.Flags().GetString("profile")
 		region, _ := cmd.Flags().GetString("region")
 
-		describeTargetGroups(profile, region)
+		withouttargets, _ := cmd.Flags().GetBool("without-targets")
+		unhealthy, _ := cmd.Flags().GetBool("unhealthy")
+
+		describeTargetGroups(profile, region, withouttargets, unhealthy)
 		//describeTargetHealth(profile, region)
 
 	},
 }
 
-func describeTargetGroups(profile string, region string) {
+func describeTargetGroups(profile string, region string, withouttargets bool, unhealthy bool) {
 	elbClient := pkg.Newelb(profile, region)
 	var lbarns []string
 
@@ -54,16 +57,17 @@ func describeTargetGroups(profile string, region string) {
 	}
 
 	for _, output := range result.TargetGroups {
+		lbarns = nil
 		tgroup := *output.TargetGroupArn
 		for _, lb := range output.LoadBalancerArns {
 			lbarns = []string{lb}
 		}
-		describeTargetHealth(profile, region, tgroup, lbarns)
+		describeTargetHealth(profile, region, tgroup, lbarns, withouttargets, unhealthy)
 	}
 
 }
 
-func describeTargetHealth(profile string, region string, tGroup string, lbArns []string) {
+func describeTargetHealth(profile string, region string, tGroup string, lbArns []string, withouttargets bool, unhealthy bool) {
 	elbClient := pkg.Newelb(profile, region)
 
 	result, err := elbClient.DescribeTargetHealth(context.TODO(), &elasticloadbalancingv2.DescribeTargetHealthInput{
@@ -74,21 +78,42 @@ func describeTargetHealth(profile string, region string, tGroup string, lbArns [
 		fmt.Println(err)
 	}
 
+	if withouttargets {
+		loadbalancerwithouttargets(result, tGroup, lbArns)
+	}
+	if unhealthy {
+		loadbalancerunhealthy(result, tGroup, lbArns)
+	}
+
+}
+
+// check target group without targets or not loadbalancer associated.
+func loadbalancerwithouttargets(result *elasticloadbalancingv2.DescribeTargetHealthOutput, tGroup string, lbArns []string) {
+	if len(result.TargetHealthDescriptions) == 0 {
+		fmt.Println(tGroup)
+		if lbArns == nil {
+			fmt.Println("Target group isn't associated to a load balancer")
+		} else {
+			fmt.Println(lbArns)
+			fmt.Println("Target group without targets")
+		}
+	}
+}
+
+// check target group without targets or not loadbalancer associated.
+func loadbalancerunhealthy(result *elasticloadbalancingv2.DescribeTargetHealthOutput, tGroup string, lbArns []string) {
 	// new target group
 	newtGroup := tGroup
 
-	// check empty struct
-
 	for _, output := range result.TargetHealthDescriptions {
 		tgrouphealth := &output.TargetHealth.State
-		//if *tgrouphealth != "healthy" && *tgrouphealth != "draining" && *tgrouphealth != "unused" {
-		if *tgrouphealth != "healthy" && *tgrouphealth != "draining" {
+		if *tgrouphealth != "healthy" && *tgrouphealth != "draining" && *tgrouphealth != "inital" {
 			if newtGroup == tGroup {
 				//lbarnsslice = append(lbarnsslice, lbArns)
-				tGroupSlice = append(tGroupSlice, tGroup)
-				fmt.Println(*tgrouphealth)
+				//tGroupSlice = append(tGroupSlice, tGroup)
 				fmt.Println(lbArns)
-				fmt.Println(tGroupSlice)
+				fmt.Println(tGroup)
+				fmt.Println(*tgrouphealth)
 				break
 			}
 		}
@@ -96,5 +121,7 @@ func describeTargetHealth(profile string, region string, tGroup string, lbArns [
 }
 
 func init() {
-	rootCmd.AddCommand(describeCmd)
+	loadbalancerCmd.Flags().BoolP("without-targets", "w", false, "Target groups without target or not associated to a load balancer.")
+	loadbalancerCmd.Flags().BoolP("unhealthy", "u", false, "Target groups with unhealthy targets.")
+	rootCmd.AddCommand(loadbalancerCmd)
 }
