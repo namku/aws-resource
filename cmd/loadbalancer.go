@@ -40,15 +40,16 @@ var loadbalancerCmd = &cobra.Command{
 		withouttargets, _ := cmd.Flags().GetBool("without-targets")
 		unhealthy, _ := cmd.Flags().GetBool("unhealthy")
 
-		describeTargetGroups(profile, region, withouttargets, unhealthy)
+		describeTargetGroups(nil, profile, region, withouttargets, unhealthy)
 	},
 }
 
-func describeTargetGroups(profile string, region string, withouttargets bool, unhealthy bool) {
+func describeTargetGroups(nextMarker *string, profile string, region string, withouttargets bool, unhealthy bool) {
 	elbClient := pkg.Newelb(profile, region)
 	var lbarns []string
 
 	result, err := elbClient.DescribeTargetGroups(context.TODO(), &elasticloadbalancingv2.DescribeTargetGroupsInput{
+		Marker: nextMarker,
 		//TargetGroupArns: []string{tgarntest},
 	})
 
@@ -56,7 +57,6 @@ func describeTargetGroups(profile string, region string, withouttargets bool, un
 		fmt.Println(err)
 	}
 
-	fmt.Println(len(result.TargetGroups))
 	for _, output := range result.TargetGroups {
 		lbarns = nil
 		tgroup := *output.TargetGroupArn
@@ -68,36 +68,9 @@ func describeTargetGroups(profile string, region string, withouttargets bool, un
 
 	// check if there are more target group pages.
 	if result.NextMarker != nil {
-		fmt.Println("hay mas paginas")
-		describeTargetGroupsNextMarker(profile, region, withouttargets, unhealthy, result)
+		describeTargetGroups(result.NextMarker, profile, region, withouttargets, unhealthy)
 	}
 
-}
-
-// List more than 400 target groups.
-func describeTargetGroupsNextMarker(profile string, region string, withouttargets bool, unhealthy bool, result *elasticloadbalancingv2.DescribeTargetGroupsOutput) {
-	elbClient := pkg.Newelb(profile, region)
-	var lbarns []string
-	nextMarker := result.NextMarker
-
-	result, err := elbClient.DescribeTargetGroups(context.TODO(), &elasticloadbalancingv2.DescribeTargetGroupsInput{
-		Marker: nextMarker,
-		//TargetGroupArns: []string{tgarntest},
-	})
-
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	fmt.Println(len(result.TargetGroups))
-	for _, output := range result.TargetGroups {
-		lbarns = nil
-		tgroup := *output.TargetGroupArn
-		for _, lb := range output.LoadBalancerArns {
-			lbarns = []string{lb}
-		}
-		describeTargetHealth(profile, region, tgroup, lbarns, withouttargets, unhealthy)
-	}
 }
 
 func describeTargetHealth(profile string, region string, tGroup string, lbArns []string, withouttargets bool, unhealthy bool) {
@@ -155,11 +128,12 @@ func loadbalancerUnhealthy(result *elasticloadbalancingv2.DescribeTargetHealthOu
 		}
 	}
 	if statusSlice != nil {
-		printTarget(tGroup, statusSlice)
+		printTarget(tGroup, lbArns, statusSlice)
 	}
 }
 
-func printTarget(tGroup string, statusSlice []string) {
+func printTarget(tGroup string, lbArns []string, statusSlice []string) {
+	fmt.Println(lbArns)
 	fmt.Print(tGroup + " ============> ")
 	fmt.Println(statusSlice)
 }
