@@ -23,9 +23,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/namku/aws-resource/pkg"
 	"github.com/spf13/cobra"
+	"golang.org/x/exp/slices"
 )
 
-//var tGroupSlice []string
+// var tgarntest = "arn:aws:elasticloadbalancing:eu-central-1:079806680060:targetgroup/k8s-wipo-wiposerv-f816083ba0/f46063e09347d019"
+var tGroupSlice []string
 
 var loadbalancerCmd = &cobra.Command{
 	Use:   "loadbalancer",
@@ -48,13 +50,14 @@ func describeTargetGroups(profile string, region string, withouttargets bool, un
 	var lbarns []string
 
 	result, err := elbClient.DescribeTargetGroups(context.TODO(), &elasticloadbalancingv2.DescribeTargetGroupsInput{
-		//		TargetGroupArns: []string{tgArn},
+		//TargetGroupArns: []string{tgarntest},
 	})
 
 	if err != nil {
 		fmt.Println(err)
 	}
 
+	fmt.Println(len(result.TargetGroups))
 	for _, output := range result.TargetGroups {
 		lbarns = nil
 		tgroup := *output.TargetGroupArn
@@ -71,6 +74,7 @@ func describeTargetHealth(profile string, region string, tGroup string, lbArns [
 
 	result, err := elbClient.DescribeTargetHealth(context.TODO(), &elasticloadbalancingv2.DescribeTargetHealthInput{
 		TargetGroupArn: &tGroup,
+		//TargetGroupArn: &tgarntest,
 	})
 
 	if err != nil {
@@ -83,7 +87,6 @@ func describeTargetHealth(profile string, region string, tGroup string, lbArns [
 	if unhealthy {
 		loadbalancerUnhealthy(result, tGroup, lbArns)
 	}
-
 }
 
 // check target group without targets or not loadbalancer associated.
@@ -93,7 +96,7 @@ func loadbalancerWithoutTargets(result *elasticloadbalancingv2.DescribeTargetHea
 		if lbArns == nil {
 			fmt.Println("Target group isn't associated to a load balancer")
 		} else {
-			fmt.Println(lbArns)
+			fmt.Print(lbArns)
 			fmt.Println("Target group without targets")
 		}
 	}
@@ -102,21 +105,44 @@ func loadbalancerWithoutTargets(result *elasticloadbalancingv2.DescribeTargetHea
 // check target group without targets or not loadbalancer associated.
 func loadbalancerUnhealthy(result *elasticloadbalancingv2.DescribeTargetHealthOutput, tGroup string, lbArns []string) {
 	// new target group
-	newtGroup := tGroup
+	newtGroup := ""
+	newStatus := ""
+	var statusSlice []string
 
 	for _, output := range result.TargetHealthDescriptions {
 		tgrouphealth := &output.TargetHealth.State
-		if *tgrouphealth != "healthy" && *tgrouphealth != "draining" && *tgrouphealth != "inital" {
-			if newtGroup == tGroup {
-				//lbarnsslice = append(lbarnsslice, lbArns)
-				//tGroupSlice = append(tGroupSlice, tGroup)
-				fmt.Println(lbArns)
-				fmt.Println(tGroup)
-				fmt.Println(*tgrouphealth)
-				break
+		//if *tgrouphealth != "healthy" && *tgrouphealth != "draining" && *tgrouphealth != "inital" {
+		if newtGroup != "" {
+			if newStatus != string(*tgrouphealth) {
+				if !slices.Contains(statusSlice, string(*tgrouphealth)) {
+					statusSlice = append(statusSlice, string(*tgrouphealth))
+					printTarget(tGroup, statusSlice)
+				}
 			}
+			tGroupSlice = append(tGroupSlice, tGroup)
+		} else {
+			newtGroup = tGroup
+			newStatus = string(*tgrouphealth)
+			statusSlice = append(statusSlice, newStatus)
+			tGroupSlice = nil
+			tGroupSlice = append(tGroupSlice, tGroup)
+			printTarget(tGroup, statusSlice)
 		}
+		//if newtGroup == tGroup {
+		//lbarnsslice = append(lbarnsslice, lbArns)
+		//tGroupSlice = append(tGroupSlice, tGroup)
+		//fmt.Println(lbArns)
+		//fmt.Println(tGroup)
+		//fmt.Println(*tgrouphealth)
+		//break
+		//}
+		//}
 	}
+}
+
+func printTarget(tGroup string, statusSlice []string) {
+	fmt.Print(tGroup + " ============> ")
+	fmt.Println(statusSlice)
 }
 
 func init() {
