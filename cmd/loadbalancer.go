@@ -27,7 +27,6 @@ import (
 )
 
 // var tgarntest = "arn:aws:elasticloadbalancing:eu-central-1:079806680060:targetgroup/k8s-wipo-wiposerv-f816083ba0/f46063e09347d019"
-var tGroupSlice []string
 
 var loadbalancerCmd = &cobra.Command{
 	Use:   "loadbalancer",
@@ -67,6 +66,38 @@ func describeTargetGroups(profile string, region string, withouttargets bool, un
 		describeTargetHealth(profile, region, tgroup, lbarns, withouttargets, unhealthy)
 	}
 
+	// check if there are more target group pages.
+	if result.NextMarker != nil {
+		fmt.Println("hay mas paginas")
+		describeTargetGroupsNextMarker(profile, region, withouttargets, unhealthy, result)
+	}
+
+}
+
+// List more than 400 target groups.
+func describeTargetGroupsNextMarker(profile string, region string, withouttargets bool, unhealthy bool, result *elasticloadbalancingv2.DescribeTargetGroupsOutput) {
+	elbClient := pkg.Newelb(profile, region)
+	var lbarns []string
+	nextMarker := result.NextMarker
+
+	result, err := elbClient.DescribeTargetGroups(context.TODO(), &elasticloadbalancingv2.DescribeTargetGroupsInput{
+		Marker: nextMarker,
+		//TargetGroupArns: []string{tgarntest},
+	})
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println(len(result.TargetGroups))
+	for _, output := range result.TargetGroups {
+		lbarns = nil
+		tgroup := *output.TargetGroupArn
+		for _, lb := range output.LoadBalancerArns {
+			lbarns = []string{lb}
+		}
+		describeTargetHealth(profile, region, tgroup, lbarns, withouttargets, unhealthy)
+	}
 }
 
 func describeTargetHealth(profile string, region string, tGroup string, lbArns []string, withouttargets bool, unhealthy bool) {
@@ -104,7 +135,6 @@ func loadbalancerWithoutTargets(result *elasticloadbalancingv2.DescribeTargetHea
 
 // check target group without targets or not loadbalancer associated.
 func loadbalancerUnhealthy(result *elasticloadbalancingv2.DescribeTargetHealthOutput, tGroup string, lbArns []string) {
-	// new target group
 	newtGroup := ""
 	newStatus := ""
 	var statusSlice []string
@@ -116,27 +146,16 @@ func loadbalancerUnhealthy(result *elasticloadbalancingv2.DescribeTargetHealthOu
 			if newStatus != string(*tgrouphealth) {
 				if !slices.Contains(statusSlice, string(*tgrouphealth)) {
 					statusSlice = append(statusSlice, string(*tgrouphealth))
-					printTarget(tGroup, statusSlice)
 				}
 			}
-			tGroupSlice = append(tGroupSlice, tGroup)
 		} else {
 			newtGroup = tGroup
 			newStatus = string(*tgrouphealth)
 			statusSlice = append(statusSlice, newStatus)
-			tGroupSlice = nil
-			tGroupSlice = append(tGroupSlice, tGroup)
-			printTarget(tGroup, statusSlice)
 		}
-		//if newtGroup == tGroup {
-		//lbarnsslice = append(lbarnsslice, lbArns)
-		//tGroupSlice = append(tGroupSlice, tGroup)
-		//fmt.Println(lbArns)
-		//fmt.Println(tGroup)
-		//fmt.Println(*tgrouphealth)
-		//break
-		//}
-		//}
+	}
+	if statusSlice != nil {
+		printTarget(tGroup, statusSlice)
 	}
 }
 
