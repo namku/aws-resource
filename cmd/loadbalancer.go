@@ -19,14 +19,21 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	"github.com/briandowns/spinner"
 	"github.com/namku/aws-resource/pkg"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/slices"
 )
 
 // var tgarntest = "arn:aws:elasticloadbalancing:eu-central-1:079806680060:targetgroup/k8s-wipo-wiposerv-f816083ba0/f46063e09347d019"
+var indicatorSpinner *spinner.Spinner
+
+var tGroupUnused []string
+var tGroupWithoutTargets []string
+var lbWithoutTargets []string
 
 var loadbalancerCmd = &cobra.Command{
 	Use:   "loadbalancer",
@@ -40,7 +47,43 @@ var loadbalancerCmd = &cobra.Command{
 		withouttargets, _ := cmd.Flags().GetBool("without-targets")
 		unhealthy, _ := cmd.Flags().GetBool("unhealthy")
 
+		startSpinner()
 		describeTargetGroups(nil, profile, region, withouttargets, unhealthy)
+		indicatorSpinner.Stop()
+
+		if withouttargets {
+			fmt.Println("[ TARGET GROUPS UNUSED ]")
+			fmt.Println()
+			for _, tGroupun := range tGroupUnused {
+				fmt.Println(tGroupun)
+			}
+			fmt.Println()
+			fmt.Println()
+			fmt.Println("[ TARGET GROUPS WITHOUT TARGETS ]")
+			fmt.Println()
+			for _, tGroupwith := range tGroupWithoutTargets {
+				fmt.Println(tGroupwith)
+			}
+			fmt.Println()
+			fmt.Println()
+			fmt.Println("[ LOADBALANCER WITHOUT TARGETS ]")
+			fmt.Println()
+			for _, lbwith := range lbWithoutTargets {
+				fmt.Println(lbwith)
+			}
+
+			fmt.Println()
+			fmt.Println()
+			fmt.Println("[ TOTAL ]")
+			fmt.Println()
+			fmt.Print("TargetGroups unused ===========> ")
+			fmt.Println(len(tGroupUnused))
+			fmt.Print("TargetGroups without targets ===========> ")
+			fmt.Println(len(tGroupWithoutTargets))
+			fmt.Print("LoadBalancers without targets ===========> ")
+			fmt.Println(len(lbWithoutTargets))
+
+		}
 	},
 }
 
@@ -95,13 +138,17 @@ func describeTargetHealth(profile string, region string, tGroup string, lbArns [
 
 // check target group without targets or not loadbalancer associated.
 func loadbalancerWithoutTargets(result *elasticloadbalancingv2.DescribeTargetHealthOutput, tGroup string, lbArns []string) {
+	// Define suffix spinner
+	indicatorSpinner.Suffix = "  " + tGroup
+
 	if len(result.TargetHealthDescriptions) == 0 {
-		fmt.Println(tGroup)
 		if lbArns == nil {
-			fmt.Println("Target group isn't associated to a load balancer")
+			tGroupUnused = append(tGroupUnused, tGroup)
 		} else {
-			fmt.Print(lbArns)
-			fmt.Println("Target group without targets")
+			tGroupWithoutTargets = append(tGroupWithoutTargets, tGroup)
+			for _, lbarn := range lbArns {
+				lbWithoutTargets = append(lbWithoutTargets, lbarn)
+			}
 		}
 	}
 }
@@ -114,17 +161,19 @@ func loadbalancerUnhealthy(result *elasticloadbalancingv2.DescribeTargetHealthOu
 
 	for _, output := range result.TargetHealthDescriptions {
 		tgrouphealth := &output.TargetHealth.State
-		//if *tgrouphealth != "healthy" && *tgrouphealth != "draining" && *tgrouphealth != "inital" {
-		if newtGroup != "" {
-			if newStatus != string(*tgrouphealth) {
-				if !slices.Contains(statusSlice, string(*tgrouphealth)) {
-					statusSlice = append(statusSlice, string(*tgrouphealth))
+		// asdfasdfa
+		if *tgrouphealth != "healthy" && *tgrouphealth != "draining" && *tgrouphealth != "inital" {
+			if newtGroup != "" {
+				if newStatus != string(*tgrouphealth) {
+					if !slices.Contains(statusSlice, string(*tgrouphealth)) {
+						statusSlice = append(statusSlice, string(*tgrouphealth))
+					}
 				}
+			} else {
+				newtGroup = tGroup
+				newStatus = string(*tgrouphealth)
+				statusSlice = append(statusSlice, newStatus)
 			}
-		} else {
-			newtGroup = tGroup
-			newStatus = string(*tgrouphealth)
-			statusSlice = append(statusSlice, newStatus)
 		}
 	}
 	if statusSlice != nil {
@@ -136,6 +185,14 @@ func printTarget(tGroup string, lbArns []string, statusSlice []string) {
 	fmt.Println(lbArns)
 	fmt.Print(tGroup + " ============> ")
 	fmt.Println(statusSlice)
+}
+
+func startSpinner() {
+	// Start spinner
+	indicatorSpinner = spinner.New(spinner.CharSets[11], 100*time.Millisecond)
+	indicatorSpinner.Start()
+	indicatorSpinner.Prefix = "  "
+	pkg.SetupCloseHandler(indicatorSpinner)
 }
 
 func init() {
