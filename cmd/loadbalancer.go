@@ -24,6 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/briandowns/spinner"
 	"github.com/namku/aws-resource/pkg"
+	progressbar "github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/slices"
 )
@@ -47,9 +48,9 @@ var loadbalancerCmd = &cobra.Command{
 		withouttargets, _ := cmd.Flags().GetBool("without-targets")
 		unhealthy, _ := cmd.Flags().GetBool("unhealthy")
 
-		startSpinner()
+		//startSpinner()
 		describeTargetGroups(nil, profile, region, withouttargets, unhealthy)
-		indicatorSpinner.Stop()
+		//indicatorSpinner.Stop()
 
 		if withouttargets {
 			fmt.Println("[ TARGET GROUPS UNUSED ]")
@@ -100,7 +101,10 @@ func describeTargetGroups(nextMarker *string, profile string, region string, wit
 		fmt.Println(err)
 	}
 
+	bar := progressbar.Default(int64(len(result.TargetGroups)))
 	for _, output := range result.TargetGroups {
+		bar.Add(1)
+		time.Sleep(40 * time.Millisecond)
 		lbarns = nil
 		tgroup := *output.TargetGroupArn
 		for _, lb := range output.LoadBalancerArns {
@@ -139,7 +143,7 @@ func describeTargetHealth(profile string, region string, tGroup string, lbArns [
 // check target group without targets or not loadbalancer associated.
 func loadbalancerWithoutTargets(result *elasticloadbalancingv2.DescribeTargetHealthOutput, tGroup string, lbArns []string) {
 	// Define suffix spinner
-	indicatorSpinner.Suffix = "  " + tGroup
+	//indicatorSpinner.Suffix = "  " + tGroup
 
 	if len(result.TargetHealthDescriptions) == 0 {
 		if lbArns == nil {
